@@ -11,6 +11,8 @@
 #define MAX_RESPONSE_LENGTH 4096
 #define MAX_EMAIL_LENGTH 30
 #define MAX_PASSWORD_LENGTH 100
+#define SECRET "MJHv9HoJHjA3xuMf"
+#define SALT "0TpBBufz8fXCimwXZ9ZuGt7Jfcv5zxO4"
 
 typedef struct Route
 {
@@ -27,23 +29,58 @@ typedef struct User
 
 int server, client;
 
-char* users_to_string(User* users, int count) {
-    char* buffer = malloc(BUFFER_SIZE);
-    if (!buffer) return NULL;
+char *togle_encrypt_decrypt(char *password, char *key)
+{
+    int pass_size = strlen(password);
+    int key_size = strlen(key);
+    char *result = malloc(pass_size + 1);
+    if (!result)
+        return NULL;
+    for (int i = 0; i < pass_size; i++)
+    {
+        result[i] = password[i] ^ key[i % key_size];
+    }
+    result[pass_size] = '\0';
+    return result;
+}
+
+char *encrypt_with_salt(char *password)
+{
+    int key_len = strlen(SECRET) + strlen(SALT);
+
+    char *key = malloc(key_len + 1);
+    if (!key)
+        return NULL;
+
+    strcpy(key, SECRET);
+    strcat(key, SALT);
+
+    char *result = togle_encrypt_decrypt(password, key);
+
+    free(key);
+    return result;
+}
+
+char *users_to_string(User *users, int count)
+{
+    char *buffer = malloc(BUFFER_SIZE);
+    if (!buffer)
+        return NULL;
 
     buffer[0] = '\0';
     int used = 0;
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
+    {
         int written = snprintf(
             buffer + used,
             BUFFER_SIZE - used,
             "{'email':'%s','password':'%s'}",
             users[i].email,
-            users[i].password
-        );
+            users[i].password);
 
-        if (written < 0 || written >= BUFFER_SIZE - used) {
+        if (written < 0 || written >= BUFFER_SIZE - used)
+        {
             break; // prevent overflow
         }
 
@@ -69,9 +106,10 @@ Route *create_route(char *path, char *method, void (*handler)(void))
     return route;
 }
 
-User *create_user(char* email, char* password) {
+User *create_user(char *email, char *password)
+{
     User *user = (User *)malloc(sizeof(User));
-  
+
     if (user == NULL)
     {
         printf("Occurred error initializing an user");
@@ -81,7 +119,7 @@ User *create_user(char* email, char* password) {
     strncpy(user->email, email, MAX_EMAIL_LENGTH - 1);
     user->email[MAX_EMAIL_LENGTH - 1] = '\0';
 
-    strncpy(user->password, password, MAX_PASSWORD_LENGTH - 1);
+    strncpy(user->password, encrypt_with_salt(password), MAX_PASSWORD_LENGTH - 1);
     user->password[MAX_PASSWORD_LENGTH - 1] = '\0';
 
     return user;
@@ -104,12 +142,13 @@ char *get_code_meaning(int code)
     case 404:
         return "Not Found";
     default:
-        return "No Content";
+        printf("Invalid code was provided");
+        exit(1);
         break;
     }
 }
 
-char *build_response(int code, char *body, char* content_type)
+char *build_response(int code, char *body, char *content_type)
 {
     char *response = (char *)malloc(MAX_RESPONSE_LENGTH);
     char *code_meaning = get_code_meaning(code);
@@ -126,7 +165,7 @@ char *build_response(int code, char *body, char* content_type)
     return response;
 }
 
-void write_response(int code, char *body, char* content_type)
+void write_response(int code, char *body, char *content_type)
 {
     char *response = build_response(code, body, content_type);
     if (write(client, response, strlen(response)) < 0)
@@ -142,7 +181,8 @@ User *recovery_saved_users(int *count)
 {
     FILE *fp = fopen("users.bin", "rb");
 
-    if (!fp) {
+    if (!fp)
+    {
         *count = 0;
         return NULL;
     }
@@ -154,9 +194,10 @@ User *recovery_saved_users(int *count)
 
     *count = file_size / sizeof(User);
 
-    User *users = (User *) malloc(file_size);
-    
-    if (!users) {
+    User *users = (User *)malloc(file_size);
+
+    if (!users)
+    {
         perror("malloc");
         fclose(fp);
         exit(1);
@@ -176,8 +217,8 @@ void default_get_handler()
 void user_get_handler()
 {
     int count;
-    User* users = recovery_saved_users(&count);
-    char* response = users_to_string(users, count);
+    User *users = recovery_saved_users(&count);
+    char *response = users_to_string(users, count);
 
     write_response(200, response, "application/json");
 
@@ -187,6 +228,7 @@ void user_get_handler()
 
 void user_post_handler()
 {
+    // CODIGO PRA VERIFICAR O BODY DO REQUEST E VALIDAR OU NAO O LOGIN
 }
 
 Route *find_route(char *path, char *method)
@@ -195,7 +237,7 @@ Route *find_route(char *path, char *method)
     Route routes[] = {
         {"/", "GET", default_get_handler},
         {"/user", "GET", user_get_handler},
-        {"/user", "POST", user_post_handler},
+        {"/user/login", "POST", user_post_handler},
     };
 
     for (int i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
@@ -227,7 +269,7 @@ void save_user(User *to_save)
 int main()
 {
 
-    User* user = create_user("lucaspio.galvao@gmail.com", "29012008");
+    User *user = create_user("lucaspio.galvao@gmail.com", "29012008");
     save_user(user);
 
     int opt = 1;
