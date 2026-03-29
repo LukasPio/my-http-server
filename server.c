@@ -9,6 +9,7 @@
 
 #define BUFFER_SIZE 10000
 #define MAX_RESPONSE_LENGTH 4096
+#define MAX_REQUEST_LENGTH 8192
 #define MAX_EMAIL_LENGTH 30
 #define MAX_PASSWORD_LENGTH 100
 #define SECRET "MJHv9HoJHjA3xuMf"
@@ -27,20 +28,29 @@ typedef struct User
     char password[MAX_PASSWORD_LENGTH];
 } User;
 
+enum ATTRIBUTE_TO_GET {
+    EMAIL,
+    PASSWORD
+};
+
 int server, client;
+char request[MAX_REQUEST_LENGTH];
 
 char *togle_encrypt_decrypt(char *password, char *key)
 {
     int pass_size = strlen(password);
     int key_size = strlen(key);
-    char *result = malloc(pass_size + 1);
+
+    char *result = malloc(pass_size * 2 + 1);
     if (!result)
         return NULL;
+
     for (int i = 0; i < pass_size; i++)
     {
-        result[i] = password[i] ^ key[i % key_size];
+        unsigned char xored = (unsigned char)password[i] ^ (unsigned char)key[i % key_size];
+        sprintf(result + i * 2, "%02x", xored);
     }
-    result[pass_size] = '\0';
+    result[pass_size * 2] = '\0';
     return result;
 }
 
@@ -61,7 +71,7 @@ char *encrypt_with_salt(char *password)
     return result;
 }
 
-char *users_to_string(User *users, int count)
+char *users_to_json(User *users, int count)
 {
     char *buffer = malloc(BUFFER_SIZE);
     if (!buffer)
@@ -75,13 +85,13 @@ char *users_to_string(User *users, int count)
         int written = snprintf(
             buffer + used,
             BUFFER_SIZE - used,
-            "{'email':'%s','password':'%s'}",
+            "{\"email\":\"%s\",\"password\":\"%s\"}",
             users[i].email,
             users[i].password);
 
         if (written < 0 || written >= BUFFER_SIZE - used)
         {
-            break; // prevent overflow
+            break;
         }
 
         used += written;
@@ -119,8 +129,10 @@ User *create_user(char *email, char *password)
     strncpy(user->email, email, MAX_EMAIL_LENGTH - 1);
     user->email[MAX_EMAIL_LENGTH - 1] = '\0';
 
-    strncpy(user->password, encrypt_with_salt(password), MAX_PASSWORD_LENGTH - 1);
+    char *enc = encrypt_with_salt(password);
+    strncpy(user->password, enc, MAX_PASSWORD_LENGTH - 1);
     user->password[MAX_PASSWORD_LENGTH - 1] = '\0';
+    free(enc);
 
     return user;
 }
@@ -141,6 +153,9 @@ char *get_code_meaning(int code)
         break;
     case 404:
         return "Not Found";
+        break;
+    case 401:
+        return "Unauthorized";
     default:
         printf("Invalid code was provided");
         exit(1);
@@ -209,46 +224,17 @@ User *recovery_saved_users(int *count)
     return users;
 }
 
-void default_get_handler()
-{
-    write_response(200, "default endpoint", "text/plain");
-}
-
-void user_get_handler()
-{
+int login(char* email, char* password) {
     int count;
-    User *users = recovery_saved_users(&count);
-    char *response = users_to_string(users, count);
-
-    write_response(200, response, "application/json");
-
-    free(response);
-    free(users);
-}
-
-void user_post_handler()
-{
-    // CODIGO PRA VERIFICAR O BODY DO REQUEST E VALIDAR OU NAO O LOGIN
-}
-
-Route *find_route(char *path, char *method)
-{
-
-    Route routes[] = {
-        {"/", "GET", default_get_handler},
-        {"/user", "GET", user_get_handler},
-        {"/user/login", "POST", user_post_handler},
-    };
-
-    for (int i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
-    {
-        if (strcmp(path, routes[i].path) == 0 && strcmp(method, routes[i].method) == 0)
-        {
-            return create_route(routes[i].path, routes[i].method, routes[i].handler);
+    User* all_users = recovery_saved_users(&count);
+    User* current;
+    for (int i = 0; i < count; i++) {
+        current = &all_users[i];
+        if (strcmp(current->email, email) == 0 && strcmp(current->password, encrypt_with_salt(password)) == 0) {
+            return 1;
         }
     }
-
-    return NULL;
+    return 0;
 }
 
 void save_user(User *to_save)
@@ -266,11 +252,100 @@ void save_user(User *to_save)
     fclose(fp);
 }
 
+void default_get_handler()
+{
+    write_response(200, "default endpoint", "text/plain");
+}
+
+void user_get_handler()
+{
+    int count;
+    User *users = recovery_saved_users(&count);
+    char *response = users_to_json(users, count);
+
+    write_response(200, response, "application/json");
+
+    free(response);
+    free(users);
+}
+
+char* get_attribute_from_string(char* string, enum ATTRIBUTE_TO_GET attribute) {
+
+    char* to_find = attribute == PASSWORD ? "\"password\":" : "\"email\":";
+
+    char* body = strstr(string, "\r\n\r\n");
+    if (!body) return NULL;
+    body += 4;
+
+    char* content = strstr(body, to_find);
+    if (!content) return NULL;
+    content += strlen(to_find);
+    while (*content == ' ') content++;
+
+    if (*content != '"') return NULL;
+    char* start = content + 1;
+
+    int length = 0;
+    while (start[length] != '\0' && start[length] != '"') {
+        length++;
+    }
+
+    char* result = malloc(length + 1);
+    if (!result) return NULL;
+
+    for (int i = 0; i < length; i++) {
+        result[i] = start[i];
+    }
+    result[length] = '\0';
+
+    return result;
+}
+
+void user_login_post_handler()
+{
+    char* email             = get_attribute_from_string(request, EMAIL);
+    char* password          = get_attribute_from_string(request, PASSWORD);
+    char* encrypted_password = encrypt_with_salt(password);
+
+    int count;
+    User* all_users = recovery_saved_users(&count);
+
+    for (int i = 0; i < count; i++) {
+        User current = all_users[i];
+        if (strcmp(email, current.email) == 0 && strcmp(encrypted_password, current.password) == 0) {
+            write_response(200, "login feito com sucesso", "text/plain");
+            return;
+        }
+    }
+    write_response(401, "Unauthorized", "text/plain");
+}
+
+Route *find_route(char *path, char *method)
+{
+
+    Route routes[] = {
+        {"/", "GET", default_get_handler},
+        {"/user", "GET", user_get_handler},
+        {"/user/login", "POST", user_login_post_handler},
+    };
+
+    for (int i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
+    {
+        if (strcmp(path, routes[i].path) == 0 && strcmp(method, routes[i].method) == 0)
+        {
+            return create_route(routes[i].path, routes[i].method, routes[i].handler);
+        }
+    }
+
+    return NULL;
+}
+
 int main()
 {
 
     User *user = create_user("lucaspio.galvao@gmail.com", "29012008");
     save_user(user);
+    free(user);
 
     int opt = 1;
     server = socket(AF_INET, SOCK_STREAM, 0);
@@ -287,7 +362,6 @@ int main()
     if (bind(server, (const struct sockaddr *)&sock_addr, sizeof(sock_addr)) < 0)
         throw_socket_err("bind", server);
 
-    // FIX: listen fora do loop (era dentro)
     if (listen(server, 1) < 0)
         throw_socket_err("listen", server);
 
@@ -301,8 +375,6 @@ int main()
             close(client);
             throw_socket_err("accept", server);
         }
-
-        char request[1024];
 
         if (read(client, request, sizeof(request)) < 0)
         {
