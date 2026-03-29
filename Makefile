@@ -1,2 +1,7 @@
+build:
+	gcc server.c -o server.o
 run:
-	gcc server.c -o server && ./server
+	./server.o
+reload:
+	gcc server.c -o server.o
+	./server.o
