@@ -28,7 +28,8 @@ typedef struct User
     char password[MAX_PASSWORD_LENGTH];
 } User;
 
-enum ATTRIBUTE_TO_GET {
+enum ATTRIBUTE_TO_GET
+{
     EMAIL,
     PASSWORD
 };
@@ -224,13 +225,16 @@ User *recovery_saved_users(int *count)
     return users;
 }
 
-int login(char* email, char* password) {
+int login(char *email, char *password)
+{
     int count;
-    User* all_users = recovery_saved_users(&count);
-    User* current;
-    for (int i = 0; i < count; i++) {
+    User *all_users = recovery_saved_users(&count);
+    User *current;
+    for (int i = 0; i < count; i++)
+    {
         current = &all_users[i];
-        if (strcmp(current->email, email) == 0 && strcmp(current->password, encrypt_with_salt(password)) == 0) {
+        if (strcmp(current->email, email) == 0 && strcmp(current->password, encrypt_with_salt(password)) == 0)
+        {
             return 1;
         }
     }
@@ -263,37 +267,51 @@ void user_get_handler()
     User *users = recovery_saved_users(&count);
     char *response = users_to_json(users, count);
 
-    write_response(200, response, "application/json");
+    if (users == NULL) {
+        write_response(200, "There are no saved users", "plain/text");
+    }
+
+    else {
+        write_response(200, response, "application/json");
+    }
 
     free(response);
     free(users);
 }
 
-char* get_attribute_from_string(char* string, enum ATTRIBUTE_TO_GET attribute) {
+char *get_attribute_from_string(char *string, enum ATTRIBUTE_TO_GET attribute)
+{
 
-    char* to_find = attribute == PASSWORD ? "\"password\":" : "\"email\":";
+    char *to_find = attribute == PASSWORD ? "\"password\":" : "\"email\":";
 
-    char* body = strstr(string, "\r\n\r\n");
-    if (!body) return NULL;
+    char *body = strstr(string, "\r\n\r\n");
+    if (!body)
+        return NULL;
     body += 4;
 
-    char* content = strstr(body, to_find);
-    if (!content) return NULL;
+    char *content = strstr(body, to_find);
+    if (!content)
+        return NULL;
     content += strlen(to_find);
-    while (*content == ' ') content++;
+    while (*content == ' ')
+        content++;
 
-    if (*content != '"') return NULL;
-    char* start = content + 1;
+    if (*content != '"')
+        return NULL;
+    char *start = content + 1;
 
     int length = 0;
-    while (start[length] != '\0' && start[length] != '"') {
+    while (start[length] != '\0' && start[length] != '"')
+    {
         length++;
     }
 
-    char* result = malloc(length + 1);
-    if (!result) return NULL;
+    char *result = malloc(length + 1);
+    if (!result)
+        return NULL;
 
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < length; i++)
+    {
         result[i] = start[i];
     }
     result[length] = '\0';
@@ -303,16 +321,18 @@ char* get_attribute_from_string(char* string, enum ATTRIBUTE_TO_GET attribute) {
 
 void user_login_post_handler()
 {
-    char* email             = get_attribute_from_string(request, EMAIL);
-    char* password          = get_attribute_from_string(request, PASSWORD);
-    char* encrypted_password = encrypt_with_salt(password);
+    char *email = get_attribute_from_string(request, EMAIL);
+    char *password = get_attribute_from_string(request, PASSWORD);
+    char *encrypted_password = encrypt_with_salt(password);
 
     int count;
-    User* all_users = recovery_saved_users(&count);
+    User *all_users = recovery_saved_users(&count);
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
+    {
         User current = all_users[i];
-        if (strcmp(email, current.email) == 0 && strcmp(encrypted_password, current.password) == 0) {
+        if (strcmp(email, current.email) == 0 && strcmp(encrypted_password, current.password) == 0)
+        {
             write_response(200, "login feito com sucesso", "text/plain");
             return;
         }
@@ -342,10 +362,6 @@ Route *find_route(char *path, char *method)
 
 int main()
 {
-
-    User *user = create_user("lucaspio.galvao@gmail.com", "29012008");
-    save_user(user);
-    free(user);
 
     int opt = 1;
     server = socket(AF_INET, SOCK_STREAM, 0);
@@ -397,6 +413,7 @@ int main()
         {
             route->handler();
             free(route);
+            close(client);
         }
     }
 
