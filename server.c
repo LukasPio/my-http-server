@@ -7,11 +7,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define SERVER_PORT 8080
+#define SERVER_ADDRESS "127.0.0.1"
+
 #define BUFFER_SIZE 10000
+
 #define MAX_RESPONSE_LENGTH 4096
 #define MAX_REQUEST_LENGTH 8192
 #define MAX_EMAIL_LENGTH 30
 #define MAX_PASSWORD_LENGTH 100
+
 #define SECRET "MJHv9HoJHjA3xuMf"
 #define SALT "0TpBBufz8fXCimwXZ9ZuGt7Jfcv5zxO4"
 
@@ -157,6 +162,16 @@ char *get_code_meaning(int code)
         break;
     case 401:
         return "Unauthorized";
+        break;
+    case 400:
+        return "Bad Request";
+        break;
+    case 409:
+        return "Conflict";
+        break;
+    case 201:
+        return "Created";
+        break;
     default:
         printf("Invalid code was provided");
         exit(1);
@@ -235,9 +250,11 @@ int login(char *email, char *password)
         current = &all_users[i];
         if (strcmp(current->email, email) == 0 && strcmp(current->password, encrypt_with_salt(password)) == 0)
         {
+            free(all_users);
             return 1;
         }
     }
+    free(all_users);
     return 0;
 }
 
@@ -256,6 +273,26 @@ void save_user(User *to_save)
     fclose(fp);
 }
 
+int exists_by_email(char *email)
+{
+    int count;
+    User *users = recovery_saved_users(&count);
+
+    for (int i = 0; i < count; i++)
+    {
+        User current = users[i];
+        if (strcmp(current.email, email) == 0)
+        {
+            free(users);
+            return 1;
+        }
+    }
+
+    free(users);
+
+    return 0;
+}
+
 void default_get_handler()
 {
     write_response(200, "default endpoint", "text/plain");
@@ -267,11 +304,13 @@ void user_get_handler()
     User *users = recovery_saved_users(&count);
     char *response = users_to_json(users, count);
 
-    if (users == NULL) {
+    if (users == NULL)
+    {
         write_response(200, "There are no saved users", "plain/text");
     }
 
-    else {
+    else
+    {
         write_response(200, response, "application/json");
     }
 
@@ -334,10 +373,46 @@ void user_login_post_handler()
         if (strcmp(email, current.email) == 0 && strcmp(encrypted_password, current.password) == 0)
         {
             write_response(200, "login feito com sucesso", "text/plain");
+            free(email);
+            free(password);
+            free(all_users);
             return;
         }
     }
     write_response(401, "Unauthorized", "text/plain");
+
+    free(email);
+    free(password);
+    free(all_users);
+}
+
+void user_post_handler()
+{
+    char *email = get_attribute_from_string(request, EMAIL);
+    char *password = get_attribute_from_string(request, PASSWORD);
+
+    if (email == NULL || password == NULL)
+    {
+        write_response(400, "Email and password must be not null", "plain/text");
+        return;
+    }
+
+    if (exists_by_email(email))
+    {
+        char message[MAX_EMAIL_LENGTH + 31];
+        snprintf(message, sizeof(message), "User with email %s already exists", email);
+        write_response(409, message, "plain/text");
+        return;
+    }
+
+    User *to_save = create_user(email, password);
+    save_user(to_save);
+
+    write_response(201, NULL, "plain/text");
+
+    free(to_save);
+    free(email);
+    free(password);
 }
 
 Route *find_route(char *path, char *method)
@@ -346,6 +421,7 @@ Route *find_route(char *path, char *method)
     Route routes[] = {
         {"/", "GET", default_get_handler},
         {"/user", "GET", user_get_handler},
+        {"/user", "POST", user_post_handler},
         {"/user/login", "POST", user_login_post_handler},
     };
 
@@ -371,9 +447,9 @@ int main()
     struct sockaddr_in sock_addr;
     memset(&sock_addr, 0, sizeof(sock_addr));
 
-    sock_addr.sin_port = htons(8080);
+    sock_addr.sin_port = htons(SERVER_PORT);
     sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    sock_addr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
 
     if (bind(server, (const struct sockaddr *)&sock_addr, sizeof(sock_addr)) < 0)
         throw_socket_err("bind", server);
