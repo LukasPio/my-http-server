@@ -23,12 +23,13 @@ A lightweight HTTP server written in **pure C**, built from scratch using POSIX 
 | GET    | `/user`       | List all registered users (JSON)     |
 | POST   | `/user`       | Register a new user                  |
 | POST   | `/user/login` | Authenticate with email + password   |
+| DELETE | `/user`       | Delete a user by email               |
 
 ---
 
 ## Request Format
 
-All POST endpoints expect a JSON body:
+All POST/DELETE endpoints expect a JSON body:
 
 ```json
 {
@@ -36,6 +37,8 @@ All POST endpoints expect a JSON body:
   "password": "yourpassword"
 }
 ```
+
+> For DELETE, only `email` is required.
 
 ---
 
@@ -74,6 +77,13 @@ curl -X POST http://localhost:8080/user/login \
 **List users:**
 ```bash
 curl http://localhost:8080/user
+```
+
+**Delete user:**
+```bash
+curl -X DELETE http://localhost:8080/user \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@mail.com"}'
 ```
 
 ---
