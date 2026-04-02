@@ -408,11 +408,58 @@ void user_post_handler()
     User *to_save = create_user(email, password);
     save_user(to_save);
 
-    write_response(201, NULL, "plain/text");
+    write_response(201, "", "plain/text");
 
     free(to_save);
     free(email);
     free(password);
+}
+
+void user_delete_handler() {
+    char* email = get_attribute_from_string(request, EMAIL);
+
+    if (email == NULL) {
+        write_response(400, "Email is required", "text/plain");
+        return;
+    }
+
+    int count;
+    User* all_users = recovery_saved_users(&count);
+
+    if (all_users == NULL || count == 0) {
+        write_response(404, "No users found", "text/plain");
+        free(email);
+        return;
+    }
+
+    FILE* fp = fopen("users.bin", "wb");
+    if (!fp) {
+        write_response(500, "File error", "text/plain");
+        free(email);
+        free(all_users);
+        return;
+    }
+
+    int found = 0;
+
+    for (int i = 0; i < count; i++) {
+        if (strcmp(all_users[i].email, email) != 0) {
+            fwrite(&all_users[i], sizeof(User), 1, fp);
+        } else {
+            found = 1;
+        }
+    }
+
+    fclose(fp);
+
+    if (found) {
+        write_response(200, "User deleted successfully", "text/plain");
+    } else {
+        write_response(404, "User not found", "text/plain");
+    }
+
+    free(email);
+    free(all_users);
 }
 
 Route *find_route(char *path, char *method)
@@ -422,6 +469,7 @@ Route *find_route(char *path, char *method)
         {"/", "GET", default_get_handler},
         {"/user", "GET", user_get_handler},
         {"/user", "POST", user_post_handler},
+        {"/user", "DELETE", user_delete_handler},
         {"/user/login", "POST", user_login_post_handler},
     };
 
