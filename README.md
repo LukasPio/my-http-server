@@ -60,7 +60,7 @@ The server starts on `127.0.0.1:8080`.
 
 ### Example Requests
 
-**Register a user:**
+**Register an user:**
 ```bash
 curl -X POST http://localhost:8080/user \
   -H "Content-Type: application/json" \
