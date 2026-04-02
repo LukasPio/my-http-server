@@ -23,7 +23,7 @@ A lightweight HTTP server written in **pure C**, built from scratch using POSIX 
 | GET    | `/user`       | List all registered users (JSON)     |
 | POST   | `/user`       | Register a new user                  |
 | POST   | `/user/login` | Authenticate with email + password   |
-| DELETE | `/user`       | Delete a user by email               |
+| DELETE | `/user`       | Delete an user by email               |
 
 ---
 
