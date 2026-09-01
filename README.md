@@ -1,4 +1,18 @@
-# 🔌 C HTTP Server — User CRUD API
+# 🔌 C HTTP Server — Legacy Project
+
+> [!WARNING]
+> **This repository is a legacy learning project and is no longer being developed.**
+>
+> While building it, I realized that I had not fully understood some of the core
+> concepts involved and had delegated important parts of the learning process to
+> AI. Because of that, this code does not accurately represent the knowledge and
+> understanding I want to develop through the project.
+>
+> I am rebuilding the same idea—a HTTP server written in C—from the ground up,
+> focusing on understanding and implementing each part myself. The new project is
+> available at **[LukasPio/C-http-server](https://github.com/LukasPio/C-http-server)**.
+
+This repository remains available only as a record of the previous implementation.
 
 A lightweight HTTP server written in **pure C**, built from scratch using POSIX sockets. Supports full user management with persistent binary storage, request parsing, and XOR-based password encryption.
 
